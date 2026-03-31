@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>MatCalc</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f5f5f0; --surface: #ffffff; --surface2: #f0f0eb; --border: #e0e0d8;
+    --accent: #ff4d00; --accent2: #0066ff; --text: #111111; --muted: #888;
+    --danger: #ff2222; --tag-bg: #efefea; --locked: #f9f9f9; --green: #00a854;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { background: var(--bg); color: var(--text); font-family: 'Syne', sans-serif; height: 100dvh; overflow: hidden; display: flex; flex-direction: column; }
+
+  .topbar { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 2px solid var(--text); background: var(--surface); z-index: 10; flex-shrink: 0; }
+  .menu-btn { background: none; border: none; color: var(--text); font-size: 24px; cursor: pointer; padding: 4px; line-height: 1; flex-shrink: 0; }
+  .topbar-title { font-size: 20px; font-weight: 800; letter-spacing: -0.5px; flex: 1; }
+  .topbar-title span { color: var(--accent); }
+  .topbar-total { font-family: 'DM Mono', monospace; font-size: 15px; color: var(--accent2); font-weight: 500; background: #e8f0ff; padding: 4px 10px; border-radius: 2px; }
+
+  .drawer-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 100; opacity: 0; pointer-events: none; transition: opacity 0.25s; }
+  .drawer-overlay.open { opacity: 1; pointer-events: all; }
+  .drawer { position: fixed; left: 0; top: 0; bottom: 0; width: 285px; background: var(--surface); z-index: 101; transform: translateX(-100%); transition: transform 0.28s cubic-bezier(0.4,0,0.2,1); display: flex; flex-direction: column; border-right: 2px solid var(--text); }
+  .drawer.open { transform: translateX(0); }
+  .drawer-header { padding: 20px 18px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .drawer-logo { font-size: 20px; font-weight: 800; }
+  .drawer-logo span { color: var(--accent); }
+  .close-btn { background: none; border: none; color: var(--muted); font-size: 22px; cursor: pointer; padding: 4px; }
+  .drawer-body { flex: 1; overflow-y: auto; padding: 16px 14px; display: flex; flex-direction: column; gap: 6px; }
+  .new-proj-btn { background: var(--accent); color: #fff; border: none; padding: 13px 16px; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 14px; cursor: pointer; width: 100%; text-align: center; margin-bottom: 14px; border-radius: 3px; }
+  .section-label { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted); letter-spacing: 2px; padding: 0 4px; margin-bottom: 4px; }
+  .proj-item { padding: 12px; cursor: pointer; border: 1px solid transparent; border-radius: 3px; transition: all 0.15s; position: relative; user-select: none; }
+  .proj-item:active { background: var(--surface2); }
+  .proj-item.active { border-color: var(--accent); background: #fff5f2; }
+  .proj-item.active::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--accent); border-radius: 3px 0 0 3px; }
+  .proj-name { font-size: 14px; font-weight: 700; }
+  .proj-meta { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted); margin-top: 2px; }
+
+  /* CONTEXT MENU */
+  .ctx-menu { position: fixed; background: var(--surface); border: 1.5px solid var(--border); border-radius: 4px; box-shadow: 0 8px 24px rgba(0,0,0,0.15); z-index: 9999; min-width: 160px; display: none; overflow: hidden; }
+  .ctx-menu.visible { display: block; }
+  .ctx-item { padding: 12px 16px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: background 0.1s; }
+  .ctx-item:hover { background: var(--surface2); }
+  .ctx-item.danger { color: var(--danger); }
+  .ctx-item.danger:hover { background: #fff0f0; }
+
+  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .proj-title-bar { padding: 14px 18px 12px; border-bottom: 1px solid var(--border); background: var(--surface); flex-shrink: 0; display: none; }
+  .proj-title-bar.visible { display: block; }
+  .proj-title-name { font-size: 26px; font-weight: 800; letter-spacing: -0.8px; color: var(--text); line-height: 1.1; }
+  .proj-title-meta { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+  .search-section { padding: 12px 14px; border-bottom: 1px solid var(--border); position: relative; flex-shrink: 0; background: var(--surface); }
+  .search-wrap { position: relative; display: flex; align-items: center; }
+  .search-icon { position: absolute; left: 13px; color: var(--muted); font-size: 16px; pointer-events: none; z-index: 1; }
+  .search-input { width: 100%; background: var(--bg); border: 1.5px solid var(--border); color: var(--text); padding: 13px 40px 13px 42px; font-family: 'DM Mono', monospace; font-size: 14px; outline: none; transition: border-color 0.2s; -webkit-appearance: none; border-radius: 3px; }
+  .search-input:focus { border-color: var(--accent2); }
+  .search-input::placeholder { color: var(--muted); }
+  .search-clear { position: absolute; right: 12px; background: none; border: none; color: var(--muted); font-size: 18px; cursor: pointer; display: none; padding: 4px; z-index: 1; }
+
+  .search-dropdown { position: absolute; left: 14px; right: 14px; top: 100%; background: var(--surface); border: 1.5px solid var(--accent2); border-top: none; z-index: 9999; max-height: 60vh; overflow-y: auto; display: none; box-shadow: 0 8px 24px rgba(0,0,0,0.12); border-radius: 0 0 4px 4px; }
+  .search-dropdown.visible { display: block; }
+  .dropdown-item { display: flex; align-items: center; gap: 12px; padding: 11px 14px; cursor: pointer; border-bottom: 1px solid var(--border); user-select: none; -webkit-user-select: none; }
+  .dropdown-item:active { background: #e8f0ff; }
+  .dropdown-item:last-child { border-bottom: none; }
+  .dropdown-img-wrap { width: 46px; height: 46px; border-radius: 4px; overflow: hidden; background: var(--surface2); flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border); font-size: 24px; }
+  .dropdown-img-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .dropdown-info { flex: 1; min-width: 0; }
+  .dropdown-name { font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dropdown-cat { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted); margin-top: 2px; }
+  .cat-tag { background: var(--tag-bg); padding: 1px 6px; border-radius: 2px; font-size: 9px; color: #666; }
+  .dropdown-price { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--accent2); flex-shrink: 0; font-weight: 500; }
+  .dropdown-loading { padding: 16px; text-align: center; font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); }
+
+  .materials-list { flex: 1; overflow-y: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 10px; color: var(--muted); font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 1px; text-align: center; padding: 40px 20px; }
+  .empty-icon { font-size: 36px; opacity: 0.2; }
+
+  /* CARD */
+  .mat-card { background: var(--surface); border: 1.5px solid var(--border); border-radius: 4px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
+  .mat-card-top { display: flex; align-items: center; gap: 12px; padding: 12px 14px; cursor: pointer; }
+  .mat-thumb { width: 48px; height: 48px; border-radius: 4px; overflow: hidden; background: var(--surface2); flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border); font-size: 24px; }
+  .mat-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .mat-info { flex: 1; min-width: 0; }
+  .mat-name { font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mat-sub { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted); margin-top: 2px; }
+  .mat-summary { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .mat-cost-big { font-family: 'DM Mono', monospace; font-size: 16px; font-weight: 700; color: var(--accent2); }
+  .mat-chevron { color: var(--muted); font-size: 14px; transition: transform 0.2s; }
+  .mat-card.expanded .mat-chevron { transform: rotate(180deg); }
+  .mat-body { display: none; border-top: 1px solid var(--border); }
+  .mat-card.expanded .mat-body { display: block; }
+  .mat-confirmed { border-top: 1px solid var(--border); padding: 8px 14px; display: flex; gap: 8px; font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); flex-wrap: wrap; align-items: center; }
+  .mat-confirmed span { background: var(--tag-bg); padding: 2px 8px; border-radius: 2px; }
+
+  /* price breakdown badge */
+  .price-calc-note { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted); padding: 6px 14px; border-bottom: 1px solid var(--border); background: var(--surface2); }
+  .price-calc-note strong { color: var(--accent2); }
+
+  .mat-dims { padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  .dim-mode-row { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 8px; }
+  .dim-mode-btn { font-family: 'DM Mono', monospace; font-size: 10px; padding: 4px 8px; border: 1px solid var(--border); background: var(--bg); color: var(--muted); cursor: pointer; border-radius: 2px; transition: all 0.15s; white-space: nowrap; }
+  .dim-mode-btn.active { background: var(--accent2); color: #fff; border-color: var(--accent2); }
+  .dims-top { display: flex; gap: 8px; align-items: flex-end; }
+  .dim-group { flex: 1; }
+  .field-label { font-family: 'DM Mono', monospace; font-size: 9px; color: var(--muted); letter-spacing: 1.5px; margin-bottom: 5px; text-transform: uppercase; }
+  .field-input { background: transparent; border: none; border-bottom: 1.5px solid var(--border); color: var(--text); font-family: 'DM Mono', monospace; font-size: 15px; font-weight: 500; width: 100%; outline: none; -webkit-appearance: none; padding-bottom: 3px; }
+  .field-input:focus { border-bottom-color: var(--accent2); }
+  .field-input::placeholder { color: #ccc; }
+  .unit-sel { font-family: 'DM Mono', monospace; font-size: 11px; border: 1px solid var(--border); background: var(--bg); color: var(--text); padding: 5px 6px; border-radius: 2px; outline: none; cursor: pointer; }
+
+  .mat-controls { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid var(--border); }
+  .mat-field { padding: 10px 14px; border-right: 1px solid var(--border); }
+  .mat-field:last-of-type { border-right: none; }
+  .price-locked .field-input { color: var(--muted); }
+  .unlock-hint { font-family: 'DM Mono', monospace; font-size: 9px; color: var(--accent2); margin-top: 3px; cursor: pointer; text-decoration: underline; }
+
+  .mat-actions { display: flex; }
+  .confirm-btn { flex: 1; background: var(--green); color: #fff; border: none; padding: 11px; cursor: pointer; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 13px; border-right: 1px solid rgba(0,0,0,0.1); }
+  .confirm-btn:active { opacity: 0.85; }
+  .detail-btn { background: none; border: none; color: var(--muted); padding: 11px 14px; cursor: pointer; font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 1px; border-right: 1px solid var(--border); flex: 1; }
+  .detail-btn:active { background: var(--surface2); }
+  .delete-btn { background: none; border: none; color: #ccc; padding: 11px 16px; cursor: pointer; font-size: 16px; }
+  .delete-btn:active { color: var(--danger); }
+
+  .mat-detail { display: none; border-top: 1px solid var(--border); padding: 14px; background: var(--surface2); gap: 12px; flex-direction: column; }
+  .mat-detail.open { display: flex; }
+  .detail-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .detail-value { font-size: 12px; line-height: 1.5; color: #444; }
+
+  /* MODAL */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 200; align-items: center; justify-content: center; padding: 20px; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: var(--surface); border: 2px solid var(--text); padding: 36px 28px 32px; width: 100%; max-width: 420px; border-radius: 8px; }
+  .modal-title { font-size: 32px; font-weight: 800; margin-bottom: 8px; text-align: center; letter-spacing: -1px; }
+  .modal-sub { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); text-align: center; margin-bottom: 24px; letter-spacing: 1px; }
+  .modal-input { width: 100%; background: var(--bg); border: 2px solid var(--border); color: var(--text); padding: 18px 16px; font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 700; outline: none; margin-bottom: 20px; border-radius: 4px; -webkit-appearance: none; line-height: 1.5; transition: border-color 0.2s; }
+  .modal-input:focus { border-color: var(--accent2); }
+  .modal-btns { display: flex; gap: 12px; }
+  .btn-primary { background: var(--accent); color: #fff; border: none; padding: 18px 20px; font-family: 'Syne', sans-serif; font-weight: 800; font-size: 16px; cursor: pointer; flex: 2; border-radius: 4px; }
+  .btn-secondary { background: transparent; color: var(--muted); border: 2px solid var(--border); padding: 18px 20px; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 16px; cursor: pointer; flex: 1; border-radius: 4px; }
+  .btn-primary:active { opacity: 0.85; }
+
+  ::-webkit-scrollbar { width: 3px; }
+  ::-webkit-scrollbar-thumb { background: var(--border); }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <button class="menu-btn" onclick="openDrawer()">☰</button>
+  <div class="topbar-title">Mat<span>Calc</span></div>
+  <div class="topbar-total" id="topbarTotal">$0.00</div>
+</div>
+
+<div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-header">
+    <div class="drawer-logo">Mat<span>Calc</span></div>
+    <button class="close-btn" onclick="closeDrawer()">✕</button>
+  </div>
+  <div class="drawer-body">
+    <button class="new-proj-btn" onclick="openModal()">+ New Project</button>
+    <div class="section-label">YOUR PROJECTS</div>
+    <div id="projectList"></div>
+  </div>
+</div>
+
+<!-- Context Menu -->
+<div class="ctx-menu" id="ctxMenu">
+  <div class="ctx-item danger" id="ctxDelete">🗑 Delete Project</div>
+</div>
+
+<div class="main">
+  <div class="proj-title-bar" id="projTitleBar">
+    <div class="proj-title-name" id="projTitleName"></div>
+    <div class="proj-title-meta" id="projTitleMeta"></div>
+  </div>
+  <div class="search-section">
+    <div class="search-wrap">
+      <span class="search-icon">⌕</span>
+      <input class="search-input" id="searchInput" placeholder="Search any material..." oninput="handleSearch()" autocomplete="off" />
+      <button class="search-clear" id="searchClear" onclick="clearSearch()">✕</button>
+    </div>
+    <div class="search-dropdown" id="searchDropdown"></div>
+  </div>
+  <div class="materials-list" id="materialsList">
+    <div class="empty-state"><div class="empty-icon">⬡</div><div>Open ☰ and create a project,<br>then search for materials above</div></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <div class="modal-title">New Project</div>
+    <div class="modal-sub">GIVE YOUR PROJECT A NAME</div>
+    <input class="modal-input" id="projectNameInput" placeholder="e.g. Prototype v1" maxlength="40" />
+    <div class="modal-btns">
+      <button class="btn-primary" onclick="createProject()">Create</button>
+      <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── CATEGORIES ───────────────────────────────────────────────────────────────
+const NO_SIZE_CATEGORIES = new Set(['Electronics','Fastener','Adhesive','Hardware']);
+
+// ─── MATERIAL DENSITY / PRICING META ─────────────────────────────────────────
+// For dimensional materials we store:
+//   pricingMode: 'by_weight' | 'by_area' | 'by_length' | 'by_unit'
+//   density_lb_in3: for metals (lb per cubic inch)
+//   density_lb_sqft: for sheet/panel goods (lb per sqft)
+// Price is always per lb or per sqft or per linear ft as listed.
+// We compute: volume/area from dims → weight → cost.
+
+const TO_IN = { in:1, ft:12, cm:0.393701, mm:0.0393701 };
+
+// ─── MATERIAL DATABASE ────────────────────────────────────────────────────────
+const LOCAL_MATERIALS = [
+  // METALS — priced per lb, density in lb/in³
+  { name:'Aluminum 6061', category:'Metal', unit:'lb', price:2.80, pricingMode:'by_weight', density_lb_in3:0.098, img:'https://images.unsplash.com/photo-1587293852726-70cdb56c2866?w=100&q=80', uses:'Structural frames, aerospace, automotive, general fabrication', manufacturers:'McMaster-Carr, Metals Depot, Online Metals', difficulty:'Easy to machine and weld', weight:'0.098 lb/in³' },
+  { name:'Mild Steel (A36)', category:'Metal', unit:'lb', price:0.85, pricingMode:'by_weight', density_lb_in3:0.284, img:'https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=100&q=80', uses:'Structural beams, brackets, welded frames and assemblies', manufacturers:'Metals Depot, Online Metals, local steel yards', difficulty:'Easy to weld, moderate machining', weight:'0.284 lb/in³' },
+  { name:'Stainless Steel 304', category:'Metal', unit:'lb', price:3.50, pricingMode:'by_weight', density_lb_in3:0.289, img:'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=100&q=80', uses:'Food equipment, medical devices, marine, corrosion-resistant enclosures', manufacturers:'Online Metals, McMaster-Carr, Metals Depot', difficulty:'Moderate machining, good weldability', weight:'0.289 lb/in³' },
+  { name:'Titanium Ti-6Al-4V', category:'Metal', unit:'lb', price:35.00, pricingMode:'by_weight', density_lb_in3:0.160, img:'https://images.unsplash.com/photo-1614730321146-b6fa6a46bcb4?w=100&q=80', uses:'Aerospace, medical implants, high-performance lightweight components', manufacturers:'VSMPO-AVISMA, ATI Metals, Titanium Joe', difficulty:'Difficult — specialty tools and welding required', weight:'0.160 lb/in³' },
+  { name:'Copper (C110)', category:'Metal', unit:'lb', price:4.20, pricingMode:'by_weight', density_lb_in3:0.324, img:'https://images.unsplash.com/photo-1526289034009-0240ddb68ce3?w=100&q=80', uses:'Electrical conductors, heat exchangers, roofing, decorative work', manufacturers:'Online Metals, McMaster-Carr, Alaskan Copper', difficulty:'Easy to machine, excellent thermal and electrical conductor', weight:'0.324 lb/in³' },
+  { name:'Brass (360)', category:'Metal', unit:'lb', price:3.80, pricingMode:'by_weight', density_lb_in3:0.307, img:'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=100&q=80', uses:'Fittings, valves, gears, musical instruments, decorative hardware', manufacturers:'Online Metals, McMaster-Carr, Metals Depot', difficulty:'Excellent machinability — free-cutting grade', weight:'0.307 lb/in³' },
+  { name:'Steel Square Tube 1"×1"', category:'Metal', unit:'lb', price:1.10, pricingMode:'by_weight', density_lb_in3:0.284, img:'https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=100&q=80', uses:'Frames, carts, furniture, machine guards, structural members', manufacturers:'Metals Depot, Online Metals, local steel yards', difficulty:'Easy to cut and weld', weight:'~0.284 lb/in³' },
+  { name:'Steel Round Tube 1" OD', category:'Metal', unit:'lb', price:1.20, pricingMode:'by_weight', density_lb_in3:0.284, img:'https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=100&q=80', uses:'Shafts, axles, handle bars, support columns', manufacturers:'Metals Depot, Online Metals', difficulty:'Easy to cut, weld with practice', weight:'~0.284 lb/in³' },
+  { name:'Aluminum Angle 1"×1"', category:'Metal', unit:'lb', price:2.50, pricingMode:'by_weight', density_lb_in3:0.098, img:'https://images.unsplash.com/photo-1587293852726-70cdb56c2866?w=100&q=80', uses:'Bracing, corner support, shelf brackets, edge trim', manufacturers:'Metals Depot, Home Depot, Online Metals', difficulty:'Easy to cut and drill', weight:'0.098 lb/in³' },
+  { name:'Sheet Metal Galvanized 22ga', category:'Metal', unit:'lb', price:1.40, pricingMode:'by_weight', density_lb_in3:0.284, img:'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=100&q=80', uses:'HVAC ducts, enclosures, weather shielding, chassis panels', manufacturers:'Metals Depot, Online Metals, local suppliers', difficulty:'Easy to cut with snips or shear', weight:'0.284 lb/in³' },
+
+  // WOOD — priced per board/sheet (unit-based), no weight pricing
+  { name:'Cedar 2×4 8ft Board', category:'Wood', unit:'board', price:9.50, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1541123437800-1bb1317badc2?w=100&q=80', uses:'Framing, outdoor structures, light construction, quick prototypes', manufacturers:'Home Depot, Lowes, local lumber yards', difficulty:'Very easy to cut and fasten', weight:'~8 lb per 8ft board' },
+  { name:'Cedar 2×6 8ft Board', category:'Wood', unit:'board', price:14.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1541123437800-1bb1317badc2?w=100&q=80', uses:'Heavier outdoor framing, decking, structural use', manufacturers:'Home Depot, Lowes', difficulty:'Easy to work with', weight:'~12 lb per 8ft board' },
+  { name:'Baltic Birch Plywood 3/4" (4×8)', category:'Wood', unit:'sheet', price:85.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1541123437800-1bb1317badc2?w=100&q=80', uses:'Enclosures, furniture, jigs, structural panels, CNC projects', manufacturers:'Woodcraft, local lumber yards', difficulty:'Very easy, excellent for CNC routing', weight:'~40 lb per 4×8 sheet' },
+  { name:'Oak Hardwood 1×4 6ft', category:'Wood', unit:'board', price:18.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1541123437800-1bb1317badc2?w=100&q=80', uses:'Fine woodworking, furniture, trim, decorative panels', manufacturers:'Woodcraft, local lumber yards, Home Depot', difficulty:'Moderate — harder to cut, takes finish beautifully', weight:'~5 lb per 6ft board' },
+  { name:'MDF Sheet 3/4" (4×8)', category:'Wood', unit:'sheet', price:45.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1541123437800-1bb1317badc2?w=100&q=80', uses:'Cabinetry, speaker boxes, smooth-surface panels, CNC carving', manufacturers:'Arauco, Roseburg, Home Depot', difficulty:'Easy to machine, heavy, swells with moisture', weight:'~95 lb per 4×8 sheet' },
+  { name:'Pine 1×6 8ft Board', category:'Wood', unit:'board', price:11.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1541123437800-1bb1317badc2?w=100&q=80', uses:'Shelving, light furniture, general indoor woodworking', manufacturers:'Home Depot, Lowes, lumber yards', difficulty:'Easy to cut, sand, and paint', weight:'~6 lb per 8ft board' },
+  { name:'Maple Hardwood 4/4 Board', category:'Wood', unit:'board', price:22.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1541123437800-1bb1317badc2?w=100&q=80', uses:'Furniture, cutting boards, flooring, high-wear surfaces', manufacturers:'Woodcraft, Rockler, lumber yards', difficulty:'Hard — requires sharp tools, excellent finish', weight:'~4.5 lb/bf' },
+
+  // PLASTICS — priced per sqft (sheet goods)
+  { name:'Acrylic Sheet 1/4" Cast', category:'Plastic', unit:'sqft', price:12.00, pricingMode:'by_area', density_lb_in3:0.043, img:'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=100&q=80', uses:'Enclosures, display panels, light diffusers, covers, signs', manufacturers:'Plaskolite, Altuglas, Tap Plastics', difficulty:'Easy to cut or laser-cut, brittle at thin edges', weight:'1.18 g/cm³' },
+  { name:'Polycarbonate Sheet 1/4"', category:'Plastic', unit:'sqft', price:18.00, pricingMode:'by_area', density_lb_in3:0.043, img:'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=100&q=80', uses:'Impact-resistant covers, safety shields, machine guards', manufacturers:'Makrolon, Lexan, Tap Plastics', difficulty:'Moderate machining, excellent impact resistance', weight:'1.20 g/cm³' },
+  { name:'HDPE Sheet 1/2"', category:'Plastic', unit:'sqft', price:8.00, pricingMode:'by_area', density_lb_in3:0.034, img:'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=100&q=80', uses:'Cutting boards, marine components, chemical tanks, wear surfaces', manufacturers:'Cadillac Plastics, ePlastics, Regal Plastics', difficulty:'Easy to machine, difficult to glue', weight:'0.96 g/cm³' },
+  { name:'Delrin Acetal Rod 1"', category:'Plastic', unit:'ft', price:9.00, pricingMode:'by_length', density_lb_in3:0.051, img:'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=100&q=80', uses:'Precision gears, bushings, bearings, sliders — low friction', manufacturers:'McMaster-Carr, ePlastics, Professional Plastics', difficulty:'Excellent machinability, self-lubricating', weight:'1.41 g/cm³' },
+  { name:'UHMW Polyethylene Sheet', category:'Plastic', unit:'sqft', price:14.00, pricingMode:'by_area', density_lb_in3:0.034, img:'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=100&q=80', uses:'Slide rails, conveyor guides, impact liners, wear pads', manufacturers:'McMaster-Carr, ePlastics, Regal Plastics', difficulty:'Easy to machine, extremely tough and slippery', weight:'0.93 g/cm³' },
+  { name:'Carbon Fiber Sheet 1/8"', category:'Composite', unit:'sqft', price:65.00, pricingMode:'by_area', density_lb_in3:0.056, img:'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&q=80', uses:'Lightweight structural panels, drone frames, RC vehicles, performance parts', manufacturers:'DragonPlate, Rock West Composites, CST', difficulty:'Difficult — requires carbide tools, generates hazardous dust', weight:'1.55 g/cm³' },
+  { name:'Fiberglass Sheet G10 1/8"', category:'Composite', unit:'sqft', price:18.00, pricingMode:'by_area', density_lb_in3:0.065, img:'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&q=80', uses:'PCB substrates, electrical insulation, waterproof structural panels', manufacturers:'McMaster-Carr, ePlastics, Professional Plastics', difficulty:'Moderate — generates fiberglass dust, use respirator', weight:'1.80 g/cm³' },
+
+  // 3D PRINT — by unit (spool/liter)
+  { name:'PLA Filament 1kg', category:'3D Print', unit:'spool', price:22.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1615486511484-92e172cc4fe0?w=100&q=80', uses:'Prototypes, decorative parts, low-stress mechanical components', manufacturers:'Hatchbox, Prusament, Polymaker', difficulty:'Very easy to print, brittle under impact', weight:'1.24 g/cm³' },
+  { name:'PETG Filament 1kg', category:'3D Print', unit:'spool', price:24.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1615486511484-92e172cc4fe0?w=100&q=80', uses:'Strong functional parts, food-safe containers, mechanical enclosures', manufacturers:'Prusament, Polymaker, Overture', difficulty:'Easy to print, strong and slightly flexible', weight:'1.27 g/cm³' },
+  { name:'ABS Filament 1kg', category:'3D Print', unit:'spool', price:20.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1615486511484-92e172cc4fe0?w=100&q=80', uses:'Functional prototypes, housings, impact-resistant parts', manufacturers:'Hatchbox, eSUN, Polymaker', difficulty:'Moderate — warping issues, needs enclosure', weight:'1.05 g/cm³' },
+  { name:'TPU Flexible Filament 1kg', category:'3D Print', unit:'spool', price:28.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1615486511484-92e172cc4fe0?w=100&q=80', uses:'Flexible gaskets, grips, tires, vibration dampers, wearables', manufacturers:'Ninjatek, Polymaker, Sainsmart', difficulty:'Moderate — slow print speeds needed', weight:'1.21 g/cm³' },
+  { name:'ASA Filament 1kg', category:'3D Print', unit:'spool', price:26.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1615486511484-92e172cc4fe0?w=100&q=80', uses:'Outdoor parts, UV-resistant enclosures, automotive trim', manufacturers:'Polymaker, Prusament, Fiberlogy', difficulty:'Similar to ABS, slightly easier warping', weight:'1.07 g/cm³' },
+  { name:'Standard Resin UV 1L', category:'3D Print', unit:'liter', price:30.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1615486511484-92e172cc4fe0?w=100&q=80', uses:'High-detail miniatures, dental, jewelry, small precision parts', manufacturers:'Elegoo, Anycubic, Siraya Tech', difficulty:'Moderate — requires PPE, UV curing and washing station', weight:'1.10–1.20 g/cm³' },
+
+  // STRUCTURAL — by unit
+  { name:'2020 Aluminum Extrusion 1m', category:'Structural', unit:'unit', price:12.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1587293852726-70cdb56c2866?w=100&q=80', uses:'Frames, CNC machines, 3D printer structure, modular machine builds', manufacturers:'Misumi, 8020 Inc, generic', difficulty:'Easy — slots accept T-nuts and standard M5 bolts', weight:'~420g/m' },
+  { name:'2040 Aluminum Extrusion 1m', category:'Structural', unit:'unit', price:16.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1587293852726-70cdb56c2866?w=100&q=80', uses:'Heavier machine frames, gantry systems, large 3D printers', manufacturers:'Misumi, 8020 Inc', difficulty:'Easy — same T-slot system as 2020', weight:'~700g/m' },
+  { name:'Linear Rail MGN12 400mm', category:'Structural', unit:'unit', price:18.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1587293852726-70cdb56c2866?w=100&q=80', uses:'CNC machines, 3D printers, camera sliders, precision linear motion', manufacturers:'Hiwin, generic, Misumi', difficulty:'Moderate — requires precise alignment during install', weight:'~200g' },
+  { name:'Lead Screw T8 500mm', category:'Structural', unit:'unit', price:9.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1587293852726-70cdb56c2866?w=100&q=80', uses:'Z-axis drives on 3D printers, lifting mechanisms, linear actuators', manufacturers:'Misumi, generic', difficulty:'Easy with brass nut — pair with stepper motor', weight:'~180g' },
+  { name:'Linear Bearing LM8UU', category:'Structural', unit:'unit', price:2.50, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1587293852726-70cdb56c2866?w=100&q=80', uses:'3D printers, CNC axis carriages, smooth rod linear motion', manufacturers:'Generic, Misumi, Hiwin', difficulty:'Easy — press-fit into printed or machined housing', weight:'~20g' },
+  { name:'Smooth Rod 8mm×500mm', category:'Structural', unit:'unit', price:6.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1587293852726-70cdb56c2866?w=100&q=80', uses:'3D printer axes, linear guides, push-rod mechanisms', manufacturers:'Misumi, generic', difficulty:'Easy — works with LM8UU bearings', weight:'~200g' },
+
+  // ELECTRONICS
+  { name:'Arduino Uno Rev3', category:'Electronics', unit:'unit', price:27.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&q=80', uses:'Prototyping with sensors, motors, displays, and automation', manufacturers:'Arduino, Elegoo (clone)', difficulty:'Beginner-friendly, massive community support', weight:'~25g' },
+  { name:'Arduino Nano', category:'Electronics', unit:'unit', price:18.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&q=80', uses:'Compact prototyping, embedded projects, sensor nodes', manufacturers:'Arduino, Elegoo, generic', difficulty:'Beginner-friendly, small form factor', weight:'~7g' },
+  { name:'Raspberry Pi 4 4GB', category:'Electronics', unit:'unit', price:55.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&q=80', uses:'IoT, robotics control, media centers, computer vision projects', manufacturers:'Raspberry Pi Foundation', difficulty:'Moderate — requires Linux knowledge', weight:'~46g' },
+  { name:'Raspberry Pi Zero 2W', category:'Electronics', unit:'unit', price:15.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&q=80', uses:'Compact embedded Linux, wearables, small robots, IoT nodes', manufacturers:'Raspberry Pi Foundation', difficulty:'Moderate — same Linux as Pi 4, tiny footprint', weight:'~10g' },
+  { name:'ESP32 Dev Board', category:'Electronics', unit:'unit', price:8.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&q=80', uses:'WiFi/Bluetooth IoT, sensor nodes, wireless data logging', manufacturers:'Espressif, Adafruit, generic', difficulty:'Moderate — needs Arduino IDE or MicroPython', weight:'~10g' },
+  { name:'NEMA 17 Stepper Motor', category:'Electronics', unit:'unit', price:14.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&q=80', uses:'3D printers, CNC machines, precision linear and rotary positioning', manufacturers:'LDO Motors, Moons, Stepperonline', difficulty:'Needs a driver board (A4988 or TMC2209)', weight:'~280g' },
+  { name:'NEMA 23 Stepper Motor', category:'Electronics', unit:'unit', price:32.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&q=80', uses:'Larger CNC machines, stronger axis drives, heavier loads', manufacturers:'Stepperonline, Leadshine, generic', difficulty:'Needs higher-current driver (DM542 or similar)', weight:'~620g' },
+  { name:'Servo SG90 Micro', category:'Electronics', unit:'unit', price:5.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&q=80', uses:'Small robotics joints, pan-tilt mounts, RC, lightweight actuation', manufacturers:'TowerPro, generic', difficulty:'Very easy — PWM control, 5V', weight:'~9g' },
+  { name:'Servo MG996R Metal Gear', category:'Electronics', unit:'unit', price:12.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&q=80', uses:'Heavy robotics joints, RC vehicles, camera gimbals, strong actuation', manufacturers:'TowerPro, Hitec, Futaba', difficulty:'Easy — PWM control, more torque than SG90', weight:'~55g' },
+  { name:'DC Gearmotor 12V 100RPM', category:'Electronics', unit:'unit', price:16.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&q=80', uses:'Wheeled robots, conveyors, automatic doors, drivetrains', manufacturers:'Pololu, Banggood, Greartisan', difficulty:'Easy with motor driver (L298N or DRV8833)', weight:'~150g' },
+  { name:'Brushless Motor 2205 2300KV', category:'Electronics', unit:'unit', price:18.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&q=80', uses:'Drones, RC aircraft, electric skateboards, high-speed drives', manufacturers:'T-Motor, Emax, Racerstar', difficulty:'Needs ESC — not directly PWM like servo', weight:'~28g' },
+  { name:'LiPo 5000mAh 3S 11.1V', category:'Electronics', unit:'unit', price:38.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&q=80', uses:'Drones, RC vehicles, portable robotics, field-deployable devices', manufacturers:'Tattu, Gens Ace, CNHL', difficulty:'Requires safe charging — fire risk if mishandled', weight:'~300g' },
+  { name:'18650 Li-Ion Cell 3000mAh', category:'Electronics', unit:'unit', price:6.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&q=80', uses:'Custom battery packs, power banks, flashlights, e-bikes', manufacturers:'Samsung, LG, Panasonic, Molicel', difficulty:'Requires BMS for safe use in packs', weight:'~47g' },
+  { name:'L298N Motor Driver', category:'Electronics', unit:'unit', price:6.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&q=80', uses:'Drive 2 DC motors bidirectionally, robotics, simple CNC', manufacturers:'Generic, ST Microelectronics', difficulty:'Easy — direction and PWM pins', weight:'~30g' },
+  { name:'A4988 Stepper Driver', category:'Electronics', unit:'unit', price:3.50, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&q=80', uses:'Drive NEMA 17 steppers in 3D printers and CNC machines', manufacturers:'Pololu, generic', difficulty:'Easy with datasheet — set current with trim pot', weight:'~5g' },
+  { name:'TMC2209 Stepper Driver', category:'Electronics', unit:'unit', price:7.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&q=80', uses:'Quiet stepper control for 3D printers, stall detection, high current', manufacturers:'Trinamic, BIGTREETECH', difficulty:'Moderate — UART config for advanced features', weight:'~5g' },
+  { name:'HC-SR04 Ultrasonic Sensor', category:'Electronics', unit:'unit', price:3.50, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&q=80', uses:'Distance sensing for robots, obstacle avoidance, level detection', manufacturers:'Generic, Sparkfun, Adafruit', difficulty:'Easy — 4 pins, trigger and echo', weight:'~8g' },
+  { name:'MPU-6050 Gyro/Accel IMU', category:'Electronics', unit:'unit', price:4.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&q=80', uses:'Orientation sensing, IMU for drones and robots, motion capture', manufacturers:'Generic, Sparkfun, Adafruit', difficulty:'Moderate — I2C protocol', weight:'~3g' },
+  { name:'12V 5A Power Supply', category:'Electronics', unit:'unit', price:18.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&q=80', uses:'Powering CNC machines, 3D printers, LED strips, robotics', manufacturers:'Meanwell, generic switching PSU', difficulty:'Easy — screw terminals, check polarity', weight:'~400g' },
+  { name:'3.5" TFT Touchscreen SPI', category:'Electronics', unit:'unit', price:14.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&q=80', uses:'Graphical UI for embedded projects, small displays, HMI', manufacturers:'Waveshare, Adafruit, generic', difficulty:'Moderate — SPI, needs library support', weight:'~60g' },
+
+  // FASTENERS
+  { name:'M3 Bolt & Nut Kit 200pk', category:'Fastener', unit:'pack', price:10.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1609696104010-9f5b7098e7e5?w=100&q=80', uses:'Electronics mounting, 3D printed assemblies, PCB standoffs', manufacturers:'McMaster-Carr, Bolt Depot, Amazon', difficulty:'Easy', weight:'Varies' },
+  { name:'M4 Bolt & Nut Kit 100pk', category:'Fastener', unit:'pack', price:10.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1609696104010-9f5b7098e7e5?w=100&q=80', uses:'Medium structural joins, brackets, mechanical assemblies', manufacturers:'McMaster-Carr, Bolt Depot', difficulty:'Easy', weight:'Varies' },
+  { name:'M5 Bolt & Nut Kit 100pk', category:'Fastener', unit:'pack', price:12.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1609696104010-9f5b7098e7e5?w=100&q=80', uses:'T-slot extrusion mounting, heavier mechanical assemblies', manufacturers:'McMaster-Carr, Bolt Depot', difficulty:'Easy', weight:'Varies' },
+  { name:'Wood Screw Assortment 200pk', category:'Fastener', unit:'pack', price:12.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1609696104010-9f5b7098e7e5?w=100&q=80', uses:'General woodworking, fastening plywood and boards', manufacturers:'Hillman, Everbilt, Spax', difficulty:'Easy with pilot hole', weight:'Varies' },
+  { name:'Heat Set Inserts M3 50pk', category:'Fastener', unit:'pack', price:9.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1609696104010-9f5b7098e7e5?w=100&q=80', uses:'Threaded inserts for 3D printed parts — strong reusable threads', manufacturers:'CNC Kitchen, Ruthex, generic', difficulty:'Easy with soldering iron tip', weight:'Minimal' },
+  { name:'T-Nuts M5 for 2020 50pk', category:'Fastener', unit:'pack', price:7.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1609696104010-9f5b7098e7e5?w=100&q=80', uses:'Sliding nuts for aluminum extrusion T-slots', manufacturers:'Misumi, 8020 Inc, generic', difficulty:'Easy — slide into slot', weight:'Minimal' },
+  { name:'Zip Ties Assortment 200pk', category:'Fastener', unit:'pack', price:6.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1609696104010-9f5b7098e7e5?w=100&q=80', uses:'Cable management, bundling wires, light fastening', manufacturers:'Gardner Bender, Panduit, generic', difficulty:'Very easy', weight:'Minimal' },
+
+  // ADHESIVES
+  { name:'J-B Weld Steel Epoxy', category:'Adhesive', unit:'unit', price:7.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=100&q=80', uses:'Bonding metal, filling gaps, structural repair, sealing', manufacturers:'J-B Weld', difficulty:'Easy — mix and apply, 24hr full cure', weight:'~200g' },
+  { name:'CA Super Glue 10ml', category:'Adhesive', unit:'unit', price:5.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=100&q=80', uses:'Quick bonding plastic, rubber, ceramics, small parts', manufacturers:'Starbond, Loctite, Bob Smith Industries', difficulty:'Very easy — instant bond, brittle under flex', weight:'Minimal' },
+  { name:'Epoxy Resin 2-part 32oz', category:'Adhesive', unit:'kit', price:35.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=100&q=80', uses:'Casting, coating, bonding composites, potting electronics', manufacturers:'Total Boat, Pro Marine, East Coast Resins', difficulty:'Moderate — mixing ratio critical, exothermic when curing', weight:'~900g kit' },
+  { name:'Loctite Threadlocker Blue', category:'Adhesive', unit:'unit', price:9.00, pricingMode:'by_unit', img:'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=100&q=80', uses:'Preventing bolt loosening from vibration — removable', manufacturers:'Loctite, Permatex', difficulty:'Very easy — apply drop to thread, let cure', weight:'Minimal' },
+];
+
+// ─── PHYSICS-BASED COST CALCULATION ──────────────────────────────────────────
+// Returns { cost, note } where note explains the calc
+function computeCost(m, qty) {
+  const q = qty || 1;
+  const f = TO_IN[m.dimUnit] || 1;
+  const d1 = parseFloat(m.dim1) || 0;
+  const d2 = parseFloat(m.dim2) || 0;
+
+  if (m.pricingMode === 'by_weight' && m.density_lb_in3) {
+    // Volume in cubic inches → weight in lbs → cost
+    let volIn3 = 0;
+    let dimLabel = '';
+    if (m.dimMode === 'linear') {
+      // assume 1in² cross section for bars/rods (simplified)
+      volIn3 = d1 * f;
+      dimLabel = `${d1} ${m.dimUnit} length`;
+    } else if (m.dimMode === 'rect') {
+      // W × H × assumed thickness (use dim2 as thickness if provided, else 1in)
+      const w = d1 * f;
+      const h = d2 * f;
+      volIn3 = w * h; // area only; treat price/lb as per sqin
+      dimLabel = `${d1}×${d2} ${m.dimUnit}`;
+    } else if (m.dimMode === 'area') {
+      // area (in dimUnit²) × depth
+      const area = d1 * f * f;
+      const depth = d2 * f;
+      volIn3 = area * depth;
+      dimLabel = `${d1} ${m.dimUnit}² × ${d2} ${m.dimUnit} deep`;
+    }
+    const weightLb = volIn3 * m.density_lb_in3;
+    const unitCost = weightLb * m.unitPrice;
+    const totalCost = unitCost * q;
+    const note = dimLabel
+      ? `${dimLabel} → ${weightLb.toFixed(3)} lb × $${m.unitPrice.toFixed(2)}/lb × ${q} = $${totalCost.toFixed(2)}`
+      : `${q} × $${m.unitPrice.toFixed(2)}/lb = $${totalCost.toFixed(2)}`;
+    return { cost: totalCost, note };
+  }
+
+  if (m.pricingMode === 'by_area') {
+    // dims → sqft → cost
+    let sqft = 0, dimLabel = '';
+    if (m.dimMode === 'rect') {
+      sqft = (d1 * f) * (d2 * f) / 144; // convert in² → sqft
+      dimLabel = `${d1}×${d2} ${m.dimUnit}`;
+    } else if (m.dimMode === 'linear') {
+      sqft = (d1 * f) / 12; // treat as linear ft
+      dimLabel = `${d1} ${m.dimUnit}`;
+    } else {
+      sqft = d1 * f * f / 144;
+      dimLabel = `${d1} ${m.dimUnit}²`;
+    }
+    const unitCost = sqft * m.unitPrice;
+    const totalCost = unitCost * q;
+    const note = dimLabel
+      ? `${dimLabel} → ${sqft.toFixed(3)} sqft × $${m.unitPrice.toFixed(2)}/sqft × ${q} = $${totalCost.toFixed(2)}`
+      : `${q} × $${m.unitPrice.toFixed(2)}/sqft = $${totalCost.toFixed(2)}`;
+    return { cost: totalCost, note };
+  }
+
+  if (m.pricingMode === 'by_length') {
+    const lenFt = (d1 * f) / 12;
+    const unitCost = lenFt * m.unitPrice;
+    const totalCost = unitCost * q;
+    const note = d1
+      ? `${d1} ${m.dimUnit} → ${lenFt.toFixed(3)} ft × $${m.unitPrice.toFixed(2)}/ft × ${q} = $${totalCost.toFixed(2)}`
+      : `${q} × $${m.unitPrice.toFixed(2)}/ft = $${totalCost.toFixed(2)}`;
+    return { cost: totalCost, note };
+  }
+
+  // by_unit (default)
+  const totalCost = q * m.unitPrice;
+  return { cost: totalCost, note: `${q} × $${m.unitPrice.toFixed(2)} = $${totalCost.toFixed(2)}` };
+}
+
+// ─── STATE ────────────────────────────────────────────────────────────────────
+let projects = [];
+try { projects = JSON.parse(localStorage.getItem('matcalc_v6') || '[]'); } catch(e) {}
+let activeId = null;
+let searchTimer = null;
+let ctxProjectId = null;
+
+function save() { try { localStorage.setItem('matcalc_v6', JSON.stringify(projects)); } catch(e) {} }
+function activeProject() { return projects.find(p => p.id === activeId); }
+function calcTotal(proj) { return (proj.materials||[]).reduce((s,m) => s+(m.lineCost||0), 0); }
+function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function hasSize(m) { return !NO_SIZE_CATEGORIES.has(m.category) && m.pricingMode !== 'by_unit'; }
+
+// ─── DRAWER ───────────────────────────────────────────────────────────────────
+function openDrawer() { document.getElementById('drawer').classList.add('open'); document.getElementById('drawerOverlay').classList.add('open'); }
+function closeDrawer() { document.getElementById('drawer').classList.remove('open'); document.getElementById('drawerOverlay').classList.remove('open'); }
+
+// ─── MODAL ────────────────────────────────────────────────────────────────────
+function openModal() {
+  closeDrawer();
+  document.getElementById('modalOverlay').classList.add('open');
+  document.getElementById('projectNameInput').value = '';
+  setTimeout(() => document.getElementById('projectNameInput').focus(), 150);
+}
+function closeModal() { document.getElementById('modalOverlay').classList.remove('open'); }
+document.getElementById('projectNameInput').addEventListener('keydown', e => { if(e.key==='Enter') createProject(); if(e.key==='Escape') closeModal(); });
+document.getElementById('modalOverlay').addEventListener('click', e => { if(e.target===document.getElementById('modalOverlay')) closeModal(); });
+function createProject() {
+  const name = document.getElementById('projectNameInput').value.trim();
+  if (!name) return;
+  const proj = { id: Date.now().toString(), name, materials: [] };
+  projects.push(proj); save(); closeModal(); renderSidebar(); setActive(proj.id);
+}
+
+// ─── CONTEXT MENU ─────────────────────────────────────────────────────────────
+const ctxMenu = document.getElementById('ctxMenu');
+function showCtxMenu(e, projId) {
+  e.preventDefault();
+  e.stopPropagation();
+  ctxProjectId = projId;
+  ctxMenu.style.left = Math.min(e.clientX, window.innerWidth - 180) + 'px';
+  ctxMenu.style.top = Math.min(e.clientY, window.innerHeight - 80) + 'px';
+  ctxMenu.classList.add('visible');
+}
+function hideCtxMenu() { ctxMenu.classList.remove('visible'); ctxProjectId = null; }
+document.getElementById('ctxDelete').addEventListener('click', () => {
+  if (!ctxProjectId) return;
+  const proj = projects.find(p => p.id === ctxProjectId);
+  if (!proj) return;
+  if (!confirm(`Delete "${proj.name}"? This cannot be undone.`)) { hideCtxMenu(); return; }
+  projects = projects.filter(p => p.id !== ctxProjectId);
+  if (activeId === ctxProjectId) { activeId = projects.length ? projects[0].id : null; }
+  save(); hideCtxMenu(); renderSidebar();
+  if (activeId) { setActive(activeId); } else { renderProjectTitle(); renderMaterials(); updateTotal(); }
+});
+document.addEventListener('click', () => hideCtxMenu());
+document.addEventListener('keydown', e => { if(e.key==='Escape') hideCtxMenu(); });
+
+// ─── SIDEBAR ──────────────────────────────────────────────────────────────────
+function renderSidebar() {
+  const el = document.getElementById('projectList');
+  if (!projects.length) { el.innerHTML = '<div style="font-family:DM Mono,monospace;font-size:11px;color:#aaa;padding:8px;text-align:center;">No projects yet</div>'; return; }
+  el.innerHTML = projects.map(p => `
+    <div class="proj-item ${p.id===activeId?'active':''}"
+      onclick="setActive('${p.id}');closeDrawer()"
+      oncontextmenu="showCtxMenu(event,'${p.id}')">
+      <div class="proj-name">${escHtml(p.name)}</div>
+      <div class="proj-meta">${(p.materials||[]).length} items · $${calcTotal(p).toFixed(2)}</div>
+    </div>`).join('');
+}
+
+function setActive(id) { activeId=id; renderSidebar(); renderProjectTitle(); renderMaterials(); updateTotal(); }
+
+function updateTotal() {
+  const proj = activeProject();
+  document.getElementById('topbarTotal').textContent = `$${proj ? calcTotal(proj).toFixed(2) : '0.00'}`;
+}
+
+function renderProjectTitle() {
+  const proj = activeProject();
+  const bar = document.getElementById('projTitleBar');
+  if (!proj) { bar.classList.remove('visible'); return; }
+  bar.classList.add('visible');
+  document.getElementById('projTitleName').textContent = proj.name;
+  const n = (proj.materials||[]).length;
+  document.getElementById('projTitleMeta').textContent = `${n} material${n!==1?'s':''} · $${calcTotal(proj).toFixed(2)} total`;
+}
+
+// ─── SEARCH ───────────────────────────────────────────────────────────────────
+function handleSearch() {
+  const q = document.getElementById('searchInput').value.trim();
+  document.getElementById('searchClear').style.display = q ? 'block' : 'none';
+  clearTimeout(searchTimer);
+  if (!q) { hideDropdown(); return; }
+  const ql = q.toLowerCase();
+  const local = LOCAL_MATERIALS.filter(m => m.name.toLowerCase().includes(ql)||m.category.toLowerCase().includes(ql)||(m.uses||'').toLowerCase().includes(ql)).slice(0,6);
+  showDropdown(local, true);
+  searchTimer = setTimeout(() => doAISearch(q), 700);
+}
+
+function clearSearch() { document.getElementById('searchInput').value=''; document.getElementById('searchClear').style.display='none'; hideDropdown(); }
+function hideDropdown() { const d=document.getElementById('searchDropdown'); d.classList.remove('visible'); d.innerHTML=''; }
+
+function showDropdown(items, loading) {
+  const d = document.getElementById('searchDropdown');
+  let html = items.map((m,i) => `
+    <div class="dropdown-item" data-idx="${i}">
+      <div class="dropdown-img-wrap">${m.img?`<img src="${m.img}" alt="" onerror="this.parentElement.innerHTML='📦'"/>`:(m.emoji||'📦')}</div>
+      <div class="dropdown-info">
+        <div class="dropdown-name">${escHtml(m.name)}</div>
+        <div class="dropdown-cat"><span class="cat-tag">${escHtml(m.category)}</span></div>
+      </div>
+      <div class="dropdown-price">$${Number(m.price).toFixed(2)}/${m.unit}</div>
+    </div>`).join('');
+  if (loading) html += `<div class="dropdown-loading">Finding more matches...</div>`;
+  d.innerHTML = html;
+  d.classList.add('visible');
+  d.querySelectorAll('.dropdown-item').forEach((el,i) => {
+    el.addEventListener('pointerdown', e => { e.preventDefault(); addMaterial(items[i]); });
+  });
+}
+
+async function doAISearch(query) {
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:1000,
+        messages:[{ role:"user", content:`Engineering materials database. User searched: "${query}". Return ONLY valid JSON array (no markdown) of up to 5 materials. Each: name, category (Metal/Wood/Plastic/3D Print/Electronics/Fastener/Composite/Structural/Adhesive/Hardware), unit, price (realistic 2025 USD), pricingMode (by_weight/by_area/by_length/by_unit), density_lb_in3 (only for metals/heavy materials, else omit), emoji, uses (1-2 sentences), manufacturers (2-3 real names), difficulty (1 sentence), weight. Only materials relevant to "${query}".` }]
+      })
+    });
+    const data = await res.json();
+    const text = (data.content||[]).map(c=>c.text||'').join('');
+    const parsed = JSON.parse(text.replace(/```json|```/g,'').trim());
+    if (!Array.isArray(parsed)) throw new Error();
+    const q = document.getElementById('searchInput').value.trim().toLowerCase();
+    if (!q) return;
+    const localNames = new Set(LOCAL_MATERIALS.map(m=>m.name.toLowerCase()));
+    const lf = LOCAL_MATERIALS.filter(m=>m.name.toLowerCase().includes(q)||m.category.toLowerCase().includes(q)||(m.uses||'').toLowerCase().includes(q)).slice(0,3);
+    const af = parsed.filter(m=>!localNames.has((m.name||'').toLowerCase())).slice(0,5);
+    showDropdown([...lf,...af].slice(0,8), false);
+  } catch(e) {
+    const q = document.getElementById('searchInput').value.trim().toLowerCase();
+    if (!q) return;
+    showDropdown(LOCAL_MATERIALS.filter(m=>m.name.toLowerCase().includes(q)||m.category.toLowerCase().includes(q)||(m.uses||'').toLowerCase().includes(q)).slice(0,6), false);
+  }
+}
+
+function addMaterial(mat) {
+  if (!activeId) { alert('Tap ☰ and create a project first.'); return; }
+  const proj = activeProject();
+  proj.materials.push({
+    uid: Date.now().toString() + Math.random().toString(36).slice(2,6),
+    name:mat.name, category:mat.category, unit:mat.unit,
+    unitPrice: Number(mat.price),
+    pricingMode: mat.pricingMode || 'by_unit',
+    density_lb_in3: mat.density_lb_in3 || null,
+    priceLocked: true,
+    img:mat.img||null, emoji:mat.emoji||'📦',
+    uses:mat.uses||'', manufacturers:mat.manufacturers||'',
+    difficulty:mat.difficulty||'', weight:mat.weight||'',
+    qty:1, dimMode:'rect', dimUnit:'in', dim1:'', dim2:'',
+    lineCost:0, calcNote:'', confirmed:false, open:false, detailOpen:false,
+  });
+  save(); clearSearch(); renderMaterials(); renderSidebar(); renderProjectTitle(); updateTotal();
+}
+
+// ─── CARD HTML ────────────────────────────────────────────────────────────────
+function cardHtml(m) {
+  const thumb = m.img ? `<img src="${m.img}" alt="" onerror="this.parentElement.innerHTML='${m.emoji||'📦'}'"/>` : (m.emoji||'📦');
+  const sizeItem = hasSize(m);
+  const { cost, note } = computeCost(m, m.qty);
+
+  let summaryTags = `<span>${m.qty}×</span><span>$${cost.toFixed(2)}</span>`;
+  if (sizeItem && (m.dim1||m.dim2)) {
+    let ds = m.dimMode==='linear' ? `${m.dim1||0} ${m.dimUnit}`
+            : m.dimMode==='rect'  ? `${m.dim1||0}×${m.dim2||0} ${m.dimUnit}`
+            :                       `${m.dim1||0}${m.dimUnit}²×${m.dim2||0}${m.dimUnit}`;
+    summaryTags += `<span>${ds}</span>`;
+  }
+
+  const modeButtons = sizeItem ? [
+    {k:'linear', label:'Length'},
+    {k:'rect',   label:'W × H'},
+    {k:'area',   label:'Area + Depth'},
+  ].map(b=>`<button class="dim-mode-btn ${m.dimMode===b.k?'active':''}" onclick="setDimMode('${m.uid}','${b.k}')">${b.label}</button>`).join('') : '';
+
+  const unitOptions = ['in','ft','cm','mm'].map(u=>`<option value="${u}" ${m.dimUnit===u?'selected':''}>${u}</option>`).join('');
+
+  let dimFields = '';
+  if (sizeItem) {
+    if (m.dimMode==='linear') {
+      dimFields=`<div class="dim-group"><div class="field-label">LENGTH</div><input class="field-input" type="number" min="0" step="any" value="${m.dim1}" placeholder="0" oninput="setDim('${m.uid}','dim1',this.value)" inputmode="decimal"/></div>`;
+    } else if (m.dimMode==='rect') {
+      dimFields=`
+        <div class="dim-group"><div class="field-label">WIDTH</div><input class="field-input" type="number" min="0" step="any" value="${m.dim1}" placeholder="0" oninput="setDim('${m.uid}','dim1',this.value)" inputmode="decimal"/></div>
+        <div style="align-self:flex-end;padding-bottom:6px;font-family:DM Mono,monospace;font-size:14px;color:var(--muted)">×</div>
+        <div class="dim-group"><div class="field-label">HEIGHT</div><input class="field-input" type="number" min="0" step="any" value="${m.dim2}" placeholder="0" oninput="setDim('${m.uid}','dim2',this.value)" inputmode="decimal"/></div>`;
+    } else {
+      dimFields=`
+        <div class="dim-group"><div class="field-label">AREA</div><input class="field-input" type="number" min="0" step="any" value="${m.dim1}" placeholder="0" oninput="setDim('${m.uid}','dim1',this.value)" inputmode="decimal"/></div>
+        <div style="align-self:flex-end;padding-bottom:6px;font-family:DM Mono,monospace;font-size:11px;color:var(--muted)">${m.dimUnit}²</div>
+        <div class="dim-group"><div class="field-label">DEPTH</div><input class="field-input" type="number" min="0" step="any" value="${m.dim2}" placeholder="0" oninput="setDim('${m.uid}','dim2',this.value)" inputmode="decimal"/></div>`;
+    }
+  }
+
+  return `
+  <div class="mat-card ${m.open?'expanded':''}" id="card-${m.uid}">
+    <div class="mat-card-top" onclick="toggleExpand('${m.uid}')">
+      <div class="mat-thumb">${thumb}</div>
+      <div class="mat-info">
+        <div class="mat-name">${escHtml(m.name)}</div>
+        <div class="mat-sub">${escHtml(m.category)} · $${m.unitPrice.toFixed(2)}/${escHtml(m.unit)}</div>
+      </div>
+      <div class="mat-summary">
+        <div class="mat-cost-big" id="cost-${m.uid}">$${cost.toFixed(2)}</div>
+        <div class="mat-chevron">▾</div>
+      </div>
+    </div>
+
+    ${m.confirmed && !m.open ? `<div class="mat-confirmed">${summaryTags}</div>` : ''}
+
+    <div class="mat-body">
+      ${sizeItem ? `
+      <div class="mat-dims">
+        <div class="dim-mode-row">${modeButtons}</div>
+        <div class="dims-top">
+          ${dimFields}
+          <div><div class="field-label">UNIT</div><select class="unit-sel" onchange="setDimUnit('${m.uid}',this.value)">${unitOptions}</select></div>
+        </div>
+      </div>` : ''}
+
+      ${note && sizeItem ? `<div class="price-calc-note">📐 <strong>${note}</strong></div>` : ''}
+
+      <div class="mat-controls">
+        <div class="mat-field">
+          <div class="field-label">QUANTITY</div>
+          <input class="field-input" type="number" min="1" step="1" value="${m.qty||1}" placeholder="1" oninput="updateQty('${m.uid}',this.value)" inputmode="numeric"/>
+        </div>
+        <div class="mat-field ${m.priceLocked?'price-locked':''}" id="pricecell-${m.uid}">
+          <div class="field-label">UNIT PRICE ${m.priceLocked?'🔒':''}</div>
+          <input class="field-input" id="priceinput-${m.uid}" type="number" min="0" step="0.01" value="${m.unitPrice.toFixed(2)}" ${m.priceLocked?'readonly':''} onchange="updatePrice('${m.uid}',this.value)" inputmode="decimal"/>
+          ${m.priceLocked ? `<div class="unlock-hint" onclick="unlockPrice('${m.uid}')">Tap to edit price</div>` : ''}
+        </div>
+      </div>
+
+      <div class="mat-actions">
+        <button class="confirm-btn" onclick="confirmMat('${m.uid}')">✓ Add to Project</button>
+        <button class="detail-btn" onclick="toggleDetail('${m.uid}')"><span id="expTxt-${m.uid}">${m.detailOpen?'▴ HIDE':'▾ DETAILS'}</span></button>
+        <button class="delete-btn" onclick="removeMat('${m.uid}')">✕</button>
+      </div>
+
+      <div class="mat-detail ${m.detailOpen?'open':''}" id="detail-${m.uid}">
+        <div class="detail-row">
+          <div><div class="field-label">USES</div><div class="detail-value">${escHtml(m.uses||'—')}</div></div>
+          <div><div class="field-label">DIFFICULTY</div><div class="detail-value">${escHtml(m.difficulty||'—')}</div></div>
+        </div>
+        <div class="detail-row">
+          <div><div class="field-label">WHERE TO BUY</div><div class="detail-value">${escHtml(m.manufacturers||'—')}</div></div>
+          <div><div class="field-label">WEIGHT/DENSITY</div><div class="detail-value">${escHtml(m.weight||'—')}</div></div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function getMat(uid) { return activeProject()?.materials.find(x=>x.uid===uid); }
+
+function reRenderCard(uid) {
+  const m = getMat(uid); if(!m) return;
+  const {cost} = computeCost(m, m.qty);
+  m.lineCost = cost; save();
+  const card = document.getElementById(`card-${uid}`);
+  if (!card) return;
+  const tmp = document.createElement('div');
+  tmp.innerHTML = cardHtml(m);
+  card.replaceWith(tmp.firstElementChild);
+  updateTotal(); renderSidebar(); renderProjectTitle();
+}
+
+function reCalc(uid) {
+  const m = getMat(uid); if(!m) return;
+  const {cost} = computeCost(m, m.qty);
+  m.lineCost = cost; save();
+  const costEl = document.getElementById(`cost-${uid}`);
+  if (costEl) costEl.textContent = `$${cost.toFixed(2)}`;
+  // update note inline if shown
+  updateTotal(); renderSidebar(); renderProjectTitle();
+}
+
+function toggleExpand(uid) { const m=getMat(uid); if(!m) return; m.open=!m.open; save(); reRenderCard(uid); }
+function confirmMat(uid) { const m=getMat(uid); if(!m) return; m.confirmed=true; m.open=false; save(); reRenderCard(uid); }
+
+function setDimMode(uid, mode) { const m=getMat(uid); if(!m) return; m.dimMode=mode; m.dim1=''; m.dim2=''; save(); reRenderCard(uid); }
+function setDimUnit(uid, unit) { const m=getMat(uid); if(!m) return; m.dimUnit=unit; save(); reRenderCard(uid); }
+function setDim(uid, field, val) { const m=getMat(uid); if(!m) return; m[field]=val; reCalc(uid); }
+function updateQty(uid, val) { const m=getMat(uid); if(!m) return; m.qty=Math.max(1,parseInt(val)||1); reCalc(uid); }
+function updatePrice(uid, val) { const m=getMat(uid); if(!m) return; m.unitPrice=parseFloat(val)||0; reCalc(uid); }
+function unlockPrice(uid) { const m=getMat(uid); if(!m) return; m.priceLocked=false; save(); reRenderCard(uid); setTimeout(()=>document.getElementById(`priceinput-${uid}`)?.focus(),50); }
+function toggleDetail(uid) {
+  const m=getMat(uid); if(!m) return; m.detailOpen=!m.detailOpen; save();
+  document.getElementById(`detail-${uid}`)?.classList.toggle('open',m.detailOpen);
+  const t=document.getElementById(`expTxt-${uid}`); if(t) t.textContent=m.detailOpen?'▴ HIDE':'▾ DETAILS';
+}
+function removeMat(uid) {
+  const proj=activeProject(); if(!proj) return;
+  proj.materials=proj.materials.filter(x=>x.uid!==uid);
+  save(); renderMaterials(); renderSidebar(); renderProjectTitle(); updateTotal();
+}
+
+function renderMaterials() {
+  const el=document.getElementById('materialsList');
+  const proj=activeProject();
+  if (!proj) { el.innerHTML=`<div class="empty-state"><div class="empty-icon">⬡</div><div>Open ☰ and create a project,<br>then search for materials above</div></div>`; return; }
+  if (!proj.materials.length) { el.innerHTML=`<div class="empty-state"><div class="empty-icon">◫</div><div>Search for a material above<br>to add it to <strong>${escHtml(proj.name)}</strong></div></div>`; return; }
+  el.innerHTML=proj.materials.map(m=>cardHtml(m)).join('');
+}
+
+document.addEventListener('click', e => { if(!e.target.closest('.search-section')) hideDropdown(); });
+
+renderSidebar();
+if (projects.length) setActive(projects[projects.length-1].id);
+</script>
+</body>
+</html>
